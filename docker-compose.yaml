@@ -1,0 +1,13 @@
+services:
+  easynews-indexer:
+    build: .
+    image: en-indexer:latest  # <--- This line fixes your error
+    container_name: easynews-indexer
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - EASYNEWS_USER=changethis
+      - EASYNEWS_PASS=changethis
+      - NEWZNAB_APIKEY=anykey
+      - PORT=8081
