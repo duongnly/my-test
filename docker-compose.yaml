@@ -7,7 +7,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - EASYNEWS_USER=changethis
-      - EASYNEWS_PASS=changethis
-      - NEWZNAB_APIKEY=anykey
+      - EASYNEWS_USER=${EASYNEWS_USER}
+      - EASYNEWS_PASS=${EASYNEWS_PASS}
+      - NEWZNAB_APIKEY=${NEWZNAB_APIKEY}
       - PORT=8081
