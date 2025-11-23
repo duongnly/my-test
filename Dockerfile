@@ -3,16 +3,12 @@ FROM python:3.11-alpine as builder
 
 WORKDIR /app
 
-# Update repos and install build dependencies with retry
+# Install build dependencies (needed for some python packages)
 RUN apk update && \
-    apk add --no-cache \
-        gcc \
-        musl-dev \
-        libffi-dev \
-        build-base \
-        --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main \
-        --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/main \
-        --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/community || \
+    apk add --no-cache gcc musl-dev libffi-dev build-base \
+    --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main \
+    --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/main \
+    --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/community || \
     (sleep 5 && apk add --no-cache gcc musl-dev libffi-dev build-base)
 
 COPY requirements.txt .
@@ -23,6 +19,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.11-alpine
 
 WORKDIR /app
+
+# Install wget for healthcheck
+RUN apk add --no-cache wget
 
 # Create a non-root user
 RUN adduser -D -u 1000 appuser
