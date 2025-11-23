@@ -163,9 +163,28 @@ class AsyncEasynewsClient:
             "0": item.value_token,
             "nameZipQ0": nzb_name
         }
+        
+        logger.info(f"[DEBUG] Requesting NZB from Easynews: {nzb_name}")
+        logger.info(f"[DEBUG] Value token: {item.value_token}")
+        logger.info(f"[DEBUG] Payload: {payload}")
 
-        async with httpx.AsyncClient(auth=self.auth, headers=self.headers, timeout=20) as client:
-            resp = await client.post(url, data=payload)
-            resp.raise_for_status()
-            content = resp.content.replace(b'date=""', b'date="0"')
-            return content
+        try:
+            async with httpx.AsyncClient(auth=self.auth, headers=self.headers, timeout=20) as client:
+                resp = await client.post(url, data=payload)
+                
+                logger.info(f"[DEBUG] Easynews response status: {resp.status_code}")
+                logger.info(f"[DEBUG] Response headers: {dict(resp.headers)}")
+                
+                resp.raise_for_status()
+                
+                content = resp.content.replace(b'date=""', b'date="0"')
+                
+                logger.info(f"[DEBUG] NZB content size: {len(content)} bytes")
+                return content
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[ERROR] Easynews returned error: {e.response.status_code}")
+            logger.error(f"[ERROR] Response body: {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"[ERROR] Failed to get NZB: {str(e)}")
+            raise
