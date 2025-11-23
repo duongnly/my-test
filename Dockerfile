@@ -3,12 +3,21 @@ FROM python:3.11-alpine as builder
 
 WORKDIR /app
 
-# Install build dependencies (needed for some python packages)
-RUN apk add --no-cache gcc musl-dev libffi-dev
+# Update repos and install build dependencies with retry
+RUN apk update && \
+    apk add --no-cache \
+        gcc \
+        musl-dev \
+        libffi-dev \
+        build-base \
+        --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main \
+        --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/main \
+        --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/community || \
+    (sleep 5 && apk add --no-cache gcc musl-dev libffi-dev build-base)
 
 COPY requirements.txt .
 # Install dependencies to a specific location
-RUN pip install --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.11-alpine
