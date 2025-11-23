@@ -38,9 +38,9 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Healthcheck
+# Healthcheck - FIXED: Use GET instead of HEAD
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:8081/health || exit 1
+  CMD wget --quiet --tries=1 -O /dev/null http://localhost:8081/health || exit 1
 
 # Environment Defaults
 ENV PORT=8081
