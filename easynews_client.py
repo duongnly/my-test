@@ -21,10 +21,14 @@ def parse_size_to_bytes(size_str: str) -> int:
     if not size_str:
         return 0
     
-    size_str = size_str.strip().upper()
+    size_str = str(size_str).strip().upper()
     match = re.match(r'([\d.]+)\s*([KMGT]?B)', size_str)
     if not match:
-        return 0
+        # Try without units
+        try:
+            return int(float(size_str))
+        except:
+            return 0
     
     value = float(match.group(1))
     unit = match.group(2)
@@ -52,7 +56,7 @@ class SearchItem:
 
     @property
     def value_token(self) -> str:
-        """Format required for Easynews DL generation"""
+        """Format required for Easynews DL generation - NOT USED FOR NZB"""
         fn_b64 = base64.b64encode(self.filename.encode()).decode().replace("=", "")
         ext_b64 = base64.b64encode(self.ext.encode()).decode().replace("=", "")
         return f"{self.hash}|{fn_b64}:{ext_b64}"
@@ -129,17 +133,21 @@ class AsyncEasynewsClient:
         for row in json_data.get("data", []):
             hash_id, filename, ext, size, sig = "", "", "", 0, None
             
-            if isinstance(row, list) and len(row) > 12:
-                hash_id = row[0]
-                size = parse_size_to_bytes(str(row[4])) if row[4] else 0
-                filename = row[10]
-                ext = row[11]
+            if isinstance(row, list) and len(row) > 11:
+                # Easynews returns arrays with specific indices
+                hash_id = str(row[0]) if row[0] else ""
+                size = parse_size_to_bytes(row[4]) if len(row) > 4 else 0
+                filename = str(row[10]) if len(row) > 10 and row[10] else ""
+                ext = str(row[11]) if len(row) > 11 and row[11] else ""
+                # Signature might be in row[8] or elsewhere
+                sig = str(row[8]) if len(row) > 8 and row[8] else None
+                
             elif isinstance(row, dict):
-                hash_id = row.get("0", "")
-                filename = row.get("10", "")
-                ext = row.get("11", "")
-                size = parse_size_to_bytes(str(row.get("4", "0")))
-                sig = row.get("sig")
+                hash_id = str(row.get("0", ""))
+                filename = str(row.get("10", ""))
+                ext = str(row.get("11", ""))
+                size = parse_size_to_bytes(row.get("4", "0"))
+                sig = row.get("sig") or row.get("8")
             
             if hash_id and filename:
                 items.append(SearchItem(
@@ -158,14 +166,15 @@ class AsyncEasynewsClient:
         """Generates and downloads the NZB file content."""
         url = f"{EASYNEWS_BASE}/2.0/api/dl-nzb"
         
+        # CRITICAL FIX: Send just the hash, not the value_token
         payload = {
-            "autoNZB": "1",
-            "0": item.value_token,
+            "0": item.hash,  # ← Just the hash ID
             "nameZipQ0": nzb_name
         }
         
-        logger.info(f"[DEBUG] Requesting NZB from Easynews: {nzb_name}")
-        logger.info(f"[DEBUG] Value token: {item.value_token}")
+        logger.info(f"[DEBUG] Requesting NZB from Easynews")
+        logger.info(f"[DEBUG] Hash: {item.hash}")
+        logger.info(f"[DEBUG] NZB Name: {nzb_name}")
         logger.info(f"[DEBUG] Payload: {payload}")
 
         try:
@@ -173,18 +182,26 @@ class AsyncEasynewsClient:
                 resp = await client.post(url, data=payload)
                 
                 logger.info(f"[DEBUG] Easynews response status: {resp.status_code}")
-                logger.info(f"[DEBUG] Response headers: {dict(resp.headers)}")
+                logger.info(f"[DEBUG] Response Content-Type: {resp.headers.get('content-type', 'N/A')}")
                 
-                resp.raise_for_status()
+                if resp.status_code != 200:
+                    logger.error(f"[ERROR] Easynews error: Status {resp.status_code}")
+                    logger.error(f"[ERROR] Response body: {resp.text[:500]}")  # First 500 chars
+                    resp.raise_for_status()
                 
-                content = resp.content.replace(b'date=""', b'date="0"')
+                content = resp.content
                 
-                logger.info(f"[DEBUG] NZB content size: {len(content)} bytes")
+                # Basic cleanup - fix empty dates
+                if b'date=""' in content:
+                    content = content.replace(b'date=""', b'date="0"')
+                
+                logger.info(f"[DEBUG] NZB generated successfully, size: {len(content)} bytes")
                 return content
+                
         except httpx.HTTPStatusError as e:
-            logger.error(f"[ERROR] Easynews returned error: {e.response.status_code}")
-            logger.error(f"[ERROR] Response body: {e.response.text}")
-            raise
+            logger.error(f"[ERROR] HTTP error from Easynews: {e.response.status_code}")
+            logger.error(f"[ERROR] Response: {e.response.text[:1000]}")
+            raise EasynewsError(f"Easynews returned {e.response.status_code}: {e.response.text[:200]}")
         except Exception as e:
-            logger.error(f"[ERROR] Failed to get NZB: {str(e)}")
+            logger.error(f"[ERROR] Failed to get NZB: {type(e).__name__}: {str(e)}")
             raise
